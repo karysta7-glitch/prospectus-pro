@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#18212b"><title>Prospectus Pro</title>
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f5f7;color:#18212b;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{background:#18212b;color:#fff;padding:14px 16px;position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center}
+h1{font-size:19px;margin:0}small{opacity:.7}.wrap{max-width:900px;margin:auto;padding:14px 14px 90px}.page{display:none}.page.active{display:block}
+.card{background:#fff;border-radius:16px;padding:15px;margin:10px 0;box-shadow:0 2px 10px #00000010}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.stat{background:#fff;border-radius:14px;padding:10px;text-align:center}.stat b{font-size:21px;display:block}.stat span{font-size:11px;color:#64707b}
+button,input,select{font:inherit}button{border:0;border-radius:11px;padding:10px 12px;font-weight:700}.primary{background:#2563eb;color:#fff}.success{background:#16a34a;color:#fff}.warn{background:#f59e0b;color:#111}.dark{background:#18212b;color:#fff}.light{background:#e8edf2;color:#18212b}.danger{background:#dc2626;color:#fff}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.between{justify-content:space-between}input,select{width:100%;padding:11px;border:1px solid #d7dde3;border-radius:10px;background:#fff}label{font-size:12px;font-weight:700;color:#596570;display:block;margin:9px 0 5px}
+.house{padding:13px;border:1px solid #e4e8ec;border-radius:14px;margin:8px 0}.address{font-weight:800}.meta{font-size:12px;color:#6b7680;margin-top:4px}.pill{display:inline-block;padding:4px 8px;border-radius:999px;font-size:10px;font-weight:800;margin-top:6px}.todo{background:#e5e7eb}.done{background:#dcfce7;color:#166534}.retry{background:#fef3c7;color:#92400e}
+.actions{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}.actions button{font-size:12px;padding:8px 9px}.note{font-size:12px;color:#66717b;line-height:1.45}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #dce2e7;display:flex;justify-content:center;z-index:10;padding:8px env(safe-area-inset-right) calc(8px + env(safe-area-inset-bottom)) env(safe-area-inset-left)}
+nav button{flex:1;max-width:160px;background:transparent;color:#596570}nav .active{background:#e9efff;color:#1d4ed8}
+#map{height:500px;border-radius:14px;overflow:hidden;background:#e5e7eb}.big{font-size:17px;padding:15px}.empty{text-align:center;padding:28px;color:#7b858e}
+table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:8px;border-bottom:1px solid #e7eaed;text-align:left}
+</style></head>
+<body>
+<header><div><h1>Prospectus Pro</h1><small id="today"></small></div><button class="light" onclick="exportJSON()">Sauvegarder</button></header>
+<div class="wrap">
+
+<section id="tour" class="page active">
+<div class="stats">
+<div class="stat"><b id="sTotal">0</b><span>maisons</span></div><div class="stat"><b id="sDone">0</b><span>distribuées</span></div>
+<div class="stat"><b id="sRetry">0</b><span>à repasser</span></div><div class="stat"><b id="sTodo">0</b><span>restantes</span></div>
+</div>
+<div class="card">
+<div class="row between"><strong>Distribution rapide</strong><button class="primary" onclick="nextHouse()">▶ Maison suivante</button></div>
+<div id="current"></div>
+</div>
+<div class="card">
+<div class="row between"><strong>Liste de la tournée</strong><select id="filter" style="max-width:170px" onchange="render()"><option value="all">Toutes</option><option value="todo">À faire</option><option value="retry">À repasser</option><option value="done">Distribuées</option></select></div>
+<div id="list"></div>
+</div>
+</section>
+
+<section id="mapPage" class="page">
+<div class="card"><div class="row between"><strong>Carte de la tournée</strong><button class="primary" onclick="locateMe()">📍 Ma position</button></div><p class="note">Appuie sur un marqueur pour afficher l'adresse et son état.</p><div id="map"></div></div>
+</section>
+
+<section id="importPage" class="page">
+<div class="card"><strong>Importer les adresses</strong><p class="note">CSV accepté. Colonnes recommandées : adresse, ville, latitude, longitude, secteur, distributeur.</p>
+<input type="file" id="csv" accept=".csv,.txt" onchange="importCSV(event)" style="margin:10px 0">
+<button class="dark" onclick="downloadTemplate()">Télécharger un modèle CSV</button></div>
+<div class="card"><strong>Distributeurs / secteurs</strong><div id="people"></div><button class="light" onclick="addPerson()">+ Ajouter un distributeur</button></div>
+</section>
+
+<section id="statsPage" class="page">
+<div class="card"><strong>Statistiques</strong><div id="stats"></div></div>
+<div class="card"><strong>Derniers passages</strong><div id="history"></div></div>
+</section>
+
+</div>
+<nav>
+<button id="n-tour" class="active" onclick="page('tour')">🏠 Tournée</button>
+<button id="n-mapPage" onclick="page('mapPage')">🗺️ Carte</button>
+<button id="n-importPage" onclick="page('importPage')">📥 Adresses</button>
+<button id="n-statsPage" onclick="page('statsPage')">📊 Stats</button>
+</nav>
+
+<script>
+const KEY="prospectus_pro_v2";let data=JSON.parse(localStorage.getItem(KEY)||'{"houses":[],"people":[]}');
+function save(){localStorage.setItem(KEY,JSON.stringify(data));render();stats();}
+function id(){return Date.now().toString(36)+Math.random().toString(36).slice(2)}
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function label(s){return s==="done"?"DISTRIBUÉ":s==="retry"?"À REPASSER":"À FAIRE"}
+function setStatus(h,st){h.status=st;h.history=h.history||[];h.history.push({status:st,time:new Date().toISOString()});save()}
+function nextHouse(){
+ let h=data.houses.find(x=>x.status==="todo")||data.houses.find(x=>x.status==="retry");
+ if(!h){alert("Toutes les maisons sont traitées.");return}
+ document.getElementById("current").innerHTML=card(h,true);
+}
+function card(h,big=false){
+ return `<div class="house ${big?'big':''}">
+ <div class="address">${esc(h.address)}</div><div class="meta">${esc(h.city)}${h.sector?' · Secteur '+esc(h.sector):''}</div>
+ <span class="pill ${h.status}">${label(h.status)}</span>
+ ${h.note?`<div class="meta">📝 ${esc(h.note)}</div>`:""}
+ <div class="actions">
+ <button class="success" onclick="setStatus(find('${h.id}'),'done');nextHouse()">✓ Distribué</button>
+ <button class="warn" onclick="setStatus(find('${h.id}'),'retry');nextHouse()">↻ Absent — repasser</button>
+ <button class="light" onclick="navigate(${h.lat||'null'},${h.lon||'null'},'${esc(h.address)}')">🧭 Naviguer</button>
+ </div></div>`
+}
+function find(i){return data.houses.find(x=>x.id===i)}
+function render(){
+ let f=document.getElementById("filter").value;let a=data.houses.filter(h=>f==="all"||h.status===f);
+ document.getElementById("list").innerHTML=a.length?a.map(h=>card(h)).join(""):'<div class="empty">Aucune maison.</div>';
+ if(!document.getElementById("current").innerHTML){nextHouse()}
+ document.getElementById("people").innerHTML=data.people.length?data.people.map((p,i)=>`<div class="row" style="margin:8px 0"><input value="${esc(p.name)}" onchange="data.people[${i}].name=this.value;save()"><button class="danger" onclick="data.people.splice(${i},1);save()">×</button></div>`).join(""):'<div class="note">Aucun distributeur.</div>';
+}
+function stats(){
+ let h=data.houses,total=h.length,done=h.filter(x=>x.status==="done").length,retry=h.filter(x=>x.status==="retry").length,todo=total-done-retry;
+ ["sTotal","sDone","sRetry","sTodo"].forEach((x,i)=>document.getElementById(x).textContent=[total,done,retry,todo][i]);
+ document.getElementById("stats").innerHTML=`<p>Progression : <b>${total?Math.round(done/total*100):0}%</b></p><p>Maisons : ${total}<br>Distribuées : ${done}<br>À repasser : ${retry}<br>À faire : ${todo}</p>`;
+ let all=h.flatMap(x=>(x.history||[]).map(e=>({...e,address:x.address}))).sort((a,b)=>b.time.localeCompare(a.time)).slice(0,20);
+ document.getElementById("history").innerHTML=all.length?'<table><tr><th>Adresse</th><th>État</th><th>Date</th></tr>'+all.map(x=>`<tr><td>${esc(x.address)}</td><td>${label(x.status)}</td><td>${new Date(x.time).toLocaleString("fr-FR")}</td></tr>`).join("")+'</table>':'<div class="note">Aucun passage.</div>';
+}
+function addPerson(){data.people.push({id:id(),name:"Nouveau distributeur"});save()}
+function importCSV(e){
+ const file=e.target.files[0];if(!file)return;const r=new FileReader();
+ r.onload=()=>{const lines=r.result.replace(/^\uFEFF/,'').trim().split(/\r?\n/);if(!lines.length)return;
+ let head=lines[0].split(/[;,]/).map(x=>x.trim().toLowerCase());let get=(row,names)=>{let i=head.findIndex(x=>names.includes(x));return i>=0?row[i]?.trim()||"":""};
+ for(let i=1;i<lines.length;i++){if(!lines[i].trim())continue;let row=lines[i].split(/[;,]/);
+ data.houses.push({id:id(),address:get(row,["adresse","address","rue"]),city:get(row,["ville","city","code postal","cp"]),lat:parseFloat(get(row,["latitude","lat"]))||null,lon:parseFloat(get(row,["longitude","lon","lng"]))||null,sector:get(row,["secteur","sector"]),person:get(row,["distributeur","personne"]),status:"todo",note:"",history:[]})}
+ save();alert("Adresses importées.");};r.readAsText(file,"UTF-8");
+}
+function downloadTemplate(){let c="adresse;ville;latitude;longitude;secteur;distributeur\n12 rue Exemple;25230 Seloncourt;47.0;6.9;Secteur A;Jean";let b=new Blob([c],{type:"text/csv;charset=utf-8"});let a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="modele_adresses.csv";a.click()}
+function exportJSON(){let b=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});let a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="prospectus-sauvegarde.json";a.click()}
+function navigate(lat,lon,address){if(lat&&lon)location.href=`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;else location.href=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`}
+function page(p){document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));document.getElementById(p).classList.add("active");document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));document.getElementById("n-"+p).classList.add("active");if(p==="mapPage")initMap()}
+let map,marks=[];
+function initMap(){if(map){drawMap();return}let s=document.createElement("script");s.src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";s.onload=()=>drawMap();document.head.appendChild(s);let c=document.createElement("link");c.rel="stylesheet";c.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";document.head.appendChild(c)}
+function drawMap(){if(!window.L)return;if(!map){map=L.map("map").setView([46.8,6.8],11);L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap"}).addTo(map)}marks.forEach(m=>m.remove());marks=[];let pts=[];data.houses.filter(h=>h.lat&&h.lon).forEach(h=>{let m=L.marker([h.lat,h.lon]).addTo(map).bindPopup(`<b>${esc(h.address)}</b><br>${label(h.status)}<br><button onclick="setStatus(find('${h.id}'),'done')">✓ Distribué</button> <button onclick="setStatus(find('${h.id}'),'retry')">↻ Repasser</button>`);marks.push(m);pts.push([h.lat,h.lon])});if(pts.length)map.fitBounds(pts,{padding:[20,20]})}
+function locateMe(){navigator.geolocation?.getCurrentPosition(p=>{if(map)map.setView([p.coords.latitude,p.coords.longitude],17)})}
+document.getElementById("today").textContent=new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});render();stats();
+</script></body></html>
